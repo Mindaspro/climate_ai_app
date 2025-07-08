@@ -5,7 +5,7 @@ import os
 # ======== PAGE CONFIGURATION ========
 st.set_page_config(
     page_title="Mfumo wa AI wa Mavuno",
-    page_icon="images/ai_crop_icon.png",  # Make sure this file exists
+   page_icon="ai_icon.png",  # ✅ Place this file in the root directory
     layout="wide"
 )
 
