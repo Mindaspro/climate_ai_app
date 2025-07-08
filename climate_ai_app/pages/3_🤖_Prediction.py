@@ -6,18 +6,32 @@ import joblib
 import numpy as np
 import matplotlib.pyplot as plt
 from datetime import date
+import os  # For safe path handling
 
 st.title("🤖 Utabiri wa Mavuno kwa Kutumia AI")
 
-# Load model
-model = joblib.load("models/yield_predictor.pkl")
-model_cols = joblib.load("models/model_columns.pkl")
+# ====== Define base directory and model paths ======
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+MODEL_PATH = os.path.join(BASE_DIR, "models", "yield_predictor.pkl")
+COLUMNS_PATH = os.path.join(BASE_DIR, "models", "model_columns.pkl")
+DB_PATH = os.path.join(BASE_DIR, "database", "climate_yield.db")
 
-# Fungua database
-conn = sqlite3.connect("database/climate_yield.db", check_same_thread=False)
+# ====== Load model and columns safely ======
+try:
+    model = joblib.load(MODEL_PATH)
+    model_cols = joblib.load(COLUMNS_PATH)
+except FileNotFoundError:
+    st.error(
+        "⚠️ Hakuna faili la modeli (`yield_predictor.pkl`) au safu (`model_columns.pkl`). "
+        "Tafadhali hakikisha yapo kwenye `models/` folder."
+    )
+    st.stop()
+
+# ====== Connect to SQLite database ======
+conn = sqlite3.connect(DB_PATH, check_same_thread=False)
 c = conn.cursor()
 
-# Orodhesha wakulima
+# ====== Fetch farmers ======
 c.execute("SELECT id, name FROM farmers")
 farmers = c.fetchall()
 
@@ -25,30 +39,39 @@ if farmers:
     selected = st.selectbox("Chagua mkulima", farmers, format_func=lambda x: x[1])
     farmer_id = selected[0]
 
-    # Taarifa za shamba la mkulima huyo
-    query = """SELECT crop_type, farm_size, soil_type, irrigation, seed_type
-               FROM farm_data WHERE farmer_id = ? ORDER BY season_year DESC LIMIT 1"""
+    # ====== Fetch latest farm data for the selected farmer ======
+    query = """
+        SELECT crop_type, farm_size, soil_type, irrigation, seed_type
+        FROM farm_data
+        WHERE farmer_id = ?
+        ORDER BY season_year DESC
+        LIMIT 1
+    """
     c.execute(query, (farmer_id,))
     farm_info = c.fetchone()
 
     if farm_info:
         crop, size, soil, irrigation, seed = farm_info
 
-        # Location ya mkulima
+        # ====== Get farmer location ======
         c.execute("SELECT location FROM farmers WHERE id = ?", (farmer_id,))
         location = c.fetchone()[0]
 
-        # Hali ya hewa
-        climate = pd.read_sql_query("""
-            SELECT AVG(rainfall) as rainfall, AVG(temperature) as temperature
+        # ====== Fetch average climate data for current year ======
+        climate = pd.read_sql_query(
+            """
+            SELECT AVG(rainfall) AS rainfall, AVG(temperature) AS temperature
             FROM climate_data
             WHERE location = ? AND year = ?
-        """, conn, params=(location, date.today().year))
+            """,
+            conn,
+            params=(location, date.today().year),
+        )
 
         rainfall = climate['rainfall'].values[0] or 600
         temperature = climate['temperature'].values[0] or 25.0
 
-        # Tayarisha data ya utabiri
+        # ====== Prepare input data for prediction ======
         input_data = pd.DataFrame({
             "crop_type": [crop],
             "farm_size": [size],
@@ -56,15 +79,17 @@ if farmers:
             "irrigation": [int(irrigation)],
             "seed_type": [seed],
             "rainfall": [rainfall],
-            "temperature": [temperature]
+            "temperature": [temperature],
         })
 
         input_encoded = pd.get_dummies(input_data)
+        # Ensure all expected model columns exist in the input, fill missing with zeros
         for col in model_cols:
             if col not in input_encoded:
                 input_encoded[col] = 0
         input_encoded = input_encoded[model_cols]
 
+        # ====== Predict yield ======
         prediction = model.predict(input_encoded)[0]
 
         st.subheader("🔮 Utabiri wa Mavuno")
@@ -83,14 +108,23 @@ if farmers:
         elif crop == "Mpunga":
             st.info("✅ Tumia SARO 5 au TXD306 – hasa kwa maeneo ya mvua nyingi au umwagiliaji.")
 
-        # Download button
-        st.download_button("⬇️ Pakua Ripoti ya CSV", data=input_data.to_csv(index=False), file_name="prediction_input.csv", mime='text/csv')
+        # ====== Download input data as CSV ======
+        st.download_button(
+            "⬇️ Pakua Ripoti ya CSV",
+            data=input_data.to_csv(index=False),
+            file_name="prediction_input.csv",
+            mime='text/csv'
+        )
 
-        # === Graph: Actual vs Predicted ===
-        past_yields = pd.read_sql_query("""
+        # ====== Plot Actual vs Predicted yields ======
+        past_yields = pd.read_sql_query(
+            """
             SELECT season_year, yield_obtained FROM farm_data
             WHERE farmer_id = ? AND crop_type = ?
-        """, conn, params=(farmer_id, crop))
+            """,
+            conn,
+            params=(farmer_id, crop),
+        )
 
         if not past_yields.empty:
             st.subheader("📊 Mchoro: Mavuno Halisi vs Utabiri")
@@ -106,14 +140,13 @@ if farmers:
             ax.legend()
             st.pyplot(fig)
 
-            # Smart interpretation
             avg_actual = np.mean(actual)
             if prediction < avg_actual:
                 st.warning(f"📉 Utabiri ni chini ya mavuno ya miaka ya nyuma (wastani: {avg_actual:.2f} kg)")
             else:
                 st.success(f"📈 Utabiri ni mzuri ukilinganishwa na historia ya mavuno (wastani: {avg_actual:.2f} kg)")
 
-        # === Feature Importance Visualization ===
+        # ====== Feature Importance Visualization ======
         st.subheader("📊 Umuhimu wa Vipengele kwenye AI Model")
         if hasattr(model, 'feature_importances_'):
             importances = model.feature_importances_
@@ -129,6 +162,9 @@ if farmers:
             st.pyplot(fig4)
         else:
             st.info("ℹ️ Model haina vipimo vya feature importance.")
+
+    else:
+        st.warning("⛔ Hakuna taarifa za shamba kwa mkulima huyu.")
 
 else:
     st.info("⛔ Hakuna wakulima waliowekwa bado.")
