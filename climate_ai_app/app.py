@@ -1,5 +1,6 @@
 # 📁 File: app.py
 import streamlit as st
+import os
 from utils import set_background
 
 st.set_page_config(page_title="AI Crop Yield App", page_icon="🌾", layout="wide")
@@ -10,17 +11,25 @@ st.title("🌾 Karibu kwenye Mfumo wa AI wa Utabiri wa Mavuno")
 col1, col2 = st.columns(2)
 
 with col1:
-    st.image("images/ads_banner.jpg", use_container_width=True)
+    ads_path = "images/ads_banner.jpg"
+    if os.path.exists(ads_path):
+        st.image(ads_path, use_container_width=True)
+    else:
+        st.warning("⚠️ Picha ya tangazo (ads_banner.jpg) haijapatikana.")
+    
     st.markdown("""
     #### 🤖 Mradi huu unasaidia:
     - Wakulima kupata utabiri wa mavuno
     - Tathmini ya mabadiliko ya tabianchi
     - Ushauri wa aina ya mazao na mbegu
-    
     """)
 
 with col2:
-    st.image("images/farmer_banner.jpg", use_container_width=True)
+    farmer_path = "images/farmer_banner.jpg"
+    if os.path.exists(farmer_path):
+        st.image(farmer_path, use_container_width=True)
+    else:
+        st.warning("⚠️ Picha ya mkulima (farmer_banner.jpg) haijapatikana.")
 
 st.markdown("---")
 
@@ -63,8 +72,19 @@ st.page_link("pages/2_📈_Assessment_Report.py", label="📈 Tathmini ya Tabian
 st.page_link("pages/3_🤖_Prediction.py", label="🤖 Utabiri wa Mavuno")
 
 with st.sidebar:
-    st.image("images/min_agri_logo.png", width=120)
-    st.image("images/uyole_logo.png", width=120)
+    agri_logo = "images/min_agri_logo.png"
+    uyole_logo = "images/uyole_logo.png"
+
+    if os.path.exists(agri_logo):
+        st.image(agri_logo, width=120)
+    else:
+        st.warning("⚠️ min_agri_logo.png haijapatikana.")
+
+    if os.path.exists(uyole_logo):
+        st.image(uyole_logo, width=120)
+    else:
+        st.warning("⚠️ uyole_logo.png haijapatikana.")
+
     st.markdown("""
     #### 📞 Mawasiliano:
     - Simu: +255 753 109 181
