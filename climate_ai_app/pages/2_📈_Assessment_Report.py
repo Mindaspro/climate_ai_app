@@ -1,15 +1,22 @@
+# 📈 2_📈_Assessment_Report.py
+
 import streamlit as st
 import sqlite3
 import pandas as pd
 import matplotlib.pyplot as plt
 import pydeck as pdk
+import os  # ✅ for cross-platform DB path
 
+# ====== TITLE ======
 st.title("📈 Tathmini ya Mabadiliko ya Tabianchi")
 
-conn = sqlite3.connect("database/climate_yield.db", check_same_thread=False)
+# ====== SAFE DATABASE CONNECTION ======
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+DB_PATH = os.path.join(BASE_DIR, "database", "climate_yield.db")
+conn = sqlite3.connect(DB_PATH, check_same_thread=False)
 c = conn.cursor()
 
-# Chagua mkulima kwa jina au namba
+# ====== FETCH FARMERS ======
 c.execute("SELECT id, name FROM farmers")
 farmers = c.fetchall()
 
@@ -17,27 +24,27 @@ if farmers:
     selected = st.selectbox("Chagua mkulima", farmers, format_func=lambda x: x[1])
     farmer_id = selected[0]
 
-    # Taarifa za kilimo
+    # ====== FARM DATA ======
     farm_df = pd.read_sql_query(f"""
         SELECT season_year, crop_type, yield_obtained
         FROM farm_data WHERE farmer_id = {farmer_id}
     """, conn)
 
-    # Location ya mkulima
+    # ====== FARMER LOCATION ======
     c.execute("SELECT location, latitude, longitude FROM farmers WHERE id = ?", (farmer_id,))
     location_data = c.fetchone()
     location = location_data[0]
     latitude = location_data[1]
     longitude = location_data[2]
 
-    # Taarifa za hali ya hewa kwa eneo lake
+    # ====== CLIMATE DATA ======
     climate_df = pd.read_sql_query("""
       SELECT year, rainfall, temperature
       FROM climate_data
       WHERE location = ?
     """, conn, params=(location,))
 
-    # Wastani wa hali ya hewa
+    # ====== CLIMATE SUMMARY ======
     rainfall = climate_df["rainfall"].mean()
     temperature = climate_df["temperature"].mean()
 
@@ -62,7 +69,7 @@ if farmers:
     else:
         st.success("🌤️ Joto la wastani linasaidia ukuaji wa mimea.")
 
-    # Ramani ya eneo la mkulima
+    # ====== MAP ======
     if latitude and longitude:
         st.markdown("### 🗺️ Ramani ya Shamba la Mkulima")
         st.pydeck_chart(pdk.Deck(
@@ -84,7 +91,7 @@ if farmers:
             ],
         ))
 
-    # Graph: Mvua kwa miaka au Jedwali
+    # ====== RAINFALL VIEW ======
     view = st.radio("🔀 Chagua namna ya kuona taarifa za mvua", ["📈 Mchoro", "📋 Jedwali"])
     if view == "📋 Jedwali":
         st.dataframe(climate_df[["year", "rainfall"]])
@@ -96,7 +103,7 @@ if farmers:
         ax1.set_ylabel("Mvua (mm)")
         st.pyplot(fig1)
 
-    # Graph: Joto kwa miaka
+    # ====== TEMPERATURE TREND ======
     st.write("🔥 Joto la Wastani kwa kila mwaka")
     fig2, ax2 = plt.subplots()
     ax2.plot(climate_df['year'], climate_df['temperature'], marker='s', color='red')
@@ -104,7 +111,7 @@ if farmers:
     ax2.set_ylabel("Joto (°C)")
     st.pyplot(fig2)
 
-    # Graph: Ukame (ikiwa ipo)
+    # ====== DROUGHT CHECK (OPTIONAL COLUMN) ======
     if "drought" in climate_df.columns:
         st.write("⚠️ Miaka yenye Ukame")
         drought_years = climate_df[climate_df['drought'] == 1]['year'].tolist()
@@ -113,7 +120,7 @@ if farmers:
         else:
             st.success("✅ Hakuna ukame ulioripotiwa kwa miaka hii.")
 
-    # Graph: Mavuno ya mkulima
+    # ====== YIELD BY YEAR ======
     st.write("🌾 Mavuno kwa kila mwaka wa kilimo")
     fig3, ax3 = plt.subplots()
     for crop in farm_df['crop_type'].unique():
@@ -124,7 +131,7 @@ if farmers:
     ax3.legend()
     st.pyplot(fig3)
 
-    # Chart interpretation based on correlation
+    # ====== CLIMATE-YIELD CORRELATION ======
     merged_df = pd.merge(farm_df, climate_df, left_on="season_year", right_on="year", how="inner")
     if not merged_df.empty:
         correlation_rain = merged_df["rainfall"].corr(merged_df["yield_obtained"])
@@ -153,7 +160,7 @@ if farmers:
         if correlation_temp > 0.3 and temperature > 30:
             st.warning("➡️ Tumia kivuli cha mimea au panda mapema ili kuepuka joto kali la baadaye.")
 
-    # Export button
+    # ====== EXPORT ======
     st.markdown("### ⬇️ Pakua Taarifa")
     st.download_button("Pakua Taarifa ya Tabianchi (CSV)", climate_df.to_csv(index=False), file_name="climate_report.csv", mime="text/csv")
 
