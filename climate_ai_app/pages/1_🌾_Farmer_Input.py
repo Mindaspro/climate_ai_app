@@ -1,10 +1,12 @@
 # 📄 1_🌾_Farmer_Input.py
+
 import streamlit as st
 import sqlite3
 import datetime
 from fpdf import FPDF
 import tempfile
 import pandas as pd
+import os
 
 # ====== LOCATION COORDINATE MAP ======
 location_coords = {
@@ -35,11 +37,15 @@ def generate_pdf_report(name, location, crop, prediction):
     pdf.output(tmp_file.name)
     return tmp_file.name
 
+# ====== SAFE DATABASE CONNECTION ======
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+DB_PATH = os.path.join(BASE_DIR, "database", "climate_yield.db")
+
+conn = sqlite3.connect(DB_PATH, check_same_thread=False)
+c = conn.cursor()
+
 # ====== STREAMLIT FORM ======
 st.title("🧑‍🌾 Ingiza Taarifa za Mkulima")
-
-conn = sqlite3.connect("database/climate_yield.db", check_same_thread=False)
-c = conn.cursor()
 
 with st.form("farmer_form"):
     name = st.text_input("Jina lako")
@@ -63,18 +69,23 @@ with st.form("farmer_form"):
     submitted = st.form_submit_button("👉 Hifadhi Taarifa")
 
     if submitted:
-        # Hifadhi mkulima
-        c.execute("""
-            INSERT INTO farmers (name, phone, location, latitude, longitude)
-            VALUES (?, ?, ?, ?, ?)
-        """, (name, phone, location, latitude, longitude))
-        farmer_id = c.lastrowid
+        try:
+            # Hifadhi mkulima
+            c.execute("""
+                INSERT INTO farmers (name, phone, location, latitude, longitude)
+                VALUES (?, ?, ?, ?, ?)
+            """, (name, phone, location, latitude, longitude))
+            farmer_id = c.lastrowid
 
-        # Hifadhi taarifa za kilimo
-        c.execute("""
-            INSERT INTO farm_data (farmer_id, crop_type, farm_size, soil_type, irrigation,
-                        seed_type, season_year, planting_date, harvest_date, yield_obtained)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, (farmer_id, crop, size, soil, irrigation, seed, season, plant_date, harvest_date, yield_amt))
-        conn.commit()
-        st.success("✅ Taarifa zimehifadhiwa kikamilifu!")
+            # Hifadhi taarifa za kilimo
+            c.execute("""
+                INSERT INTO farm_data (farmer_id, crop_type, farm_size, soil_type, irrigation,
+                            seed_type, season_year, planting_date, harvest_date, yield_obtained)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (farmer_id, crop, size, soil, irrigation, seed, season, plant_date, harvest_date, yield_amt))
+
+            conn.commit()
+            st.success("✅ Taarifa zimehifadhiwa kikamilifu!")
+
+        except Exception as e:
+            st.error(f"⚠️ Hitilafu imetokea wakati wa kuhifadhi taarifa: {e}")
